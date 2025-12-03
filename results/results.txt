@@ -1,0 +1,17 @@
+Total reads: 39504
+Unmapped reads: 0
+Fully mapped reads: 39490
+Partially mapped reads: 14
+
+Paired-end stats:
+  One full + one unmapped: 0
+  One full + one partial: 14
+  Fully mapped pairs: 19738
+
+MAPQ distribution:
+  MAPQ < 30: 4357
+  30 ≤ MAPQ < 255: 35147
+  MAPQ == 255: 0
+
+Reads per chromosome:
+  Reference: 39504
