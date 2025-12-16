@@ -1,8 +1,0 @@
-===== SAM ANALYSIS SUMMARY =====
-Total reads: 9
-Unmapped: 2
-Fully mapped: 5
-Partially mapped: 2
-Paired-end: one mapped + one unmapped: 1
-Paired-end: one mapped + one partial: 1
-Paired-end: fully mapped pairs: 1

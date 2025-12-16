@@ -15,3 +15,5 @@ MAPQ distribution:
 
 Reads per chromosome:
   Reference: 39504
+
+Could not include global CIGAR summary: [Errno 2] No such file or directory: 'outputTable_cigar.txt'

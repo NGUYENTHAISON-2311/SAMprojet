@@ -2,10 +2,10 @@
 #-*- coding : utf-8 -*-
 
 
-__authors__ = ("XXX", "XXX")
-__contact__ = ("XXX@etu.umontpellier.fr","XXX@etu.umontpellier.fr")
+__authors__ = ("Thai-Son Nguyen" )
+__contact__ = ("thai-son.nguyen01@etu.umontpellier.fr")
 __version__ = "0.0.1"
-__date__ = "12/14/2021"
+__date__ = "12/16/2025"
 __licence__ = """This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
@@ -105,30 +105,6 @@ def read_sam(file_path):
     return headers, records
 
 
-def toStringOutput(sam_line):
-    """
-    Convert SAM line to string output.
-    """
-    return str(sam_line)
-
-
-
-
-#### Convert the flag into binary ####
-def flagBinary(flag) :
-
-    flagB = bin(int(flag)) # Transform the integer into a binary.
-    flagB = flagB[2:] # Remove '0b' Example: '0b1001101' > '1001101'
-    flagB = list(flagB) 
-    if len(flagB) < 12: # Size adjustment to 12 (maximal flag size)
-        add = 12 - len(flagB) # difference between the maximal flag size (12) and the length of the binary flag
-        for t in range(add):
-            flagB.insert(0,'0') # pad with leading zeros until maximal flag size
-    return flagB
-
-
-
-
 
 ## 3/ Store,
 def store_records(headers, records_raw):
@@ -183,6 +159,21 @@ def store_records(headers, records_raw):
     return stored_data
 
 
+#### Convert the flag into binary ####
+def flagBinary(flag) :
+    """Return the FLAG value as a list of binary characters (MSB first).
+
+    Pads to 12 bits to make testing specific FLAG bits easier.
+    """
+    flagB = bin(int(flag)) # Transform the integer into a binary.
+    flagB = flagB[2:] # Remove '0b' Example: '0b1001101' > '1001101'
+    flagB = list(flagB) 
+    if len(flagB) < 12: # Size adjustment to 12 (maximal flag size)
+        add = 12 - len(flagB) # difference between the maximal flag size (12) and the length of the binary flag
+        for t in range(add):
+            flagB.insert(0,'0') # pad with leading zeros until maximal flag size
+    return flagB
+
 def readCigar(cigar):
     """Parse a CIGAR string and return a dict of operation -> total count.
 
@@ -212,51 +203,45 @@ def readCigar(cigar):
     return dico
 
 ### Analyse the CIGAR = regular expression that summarise each read alignment ###
-def percentMutation(dico):
-        
-    totalValue = 0 # Total number of mutations
-    for v in dico :
-        totalValue += dico[v]
 
-    mutList = ['M','I','D','S','H','N','P','X','=']
-    res = ""
-    for mut in mutList : # Calculated percent of mutation if mut present in the dictionnary, else, percent of mut = 0
-        if mut in dico.keys() :
-            res += (str(round((dico[mut] * 100) / totalValue, 2)) + ";")
-        else :
-            res += ("0.00" + ";")
-    return res
-
-def globalPercentCigar():
+def globalPercentCigar(records):
     """
-      Global representation of cigar distribution.
-    """
-    
-    with open ("outputTable_cigar.txt","r") as outputTable, open("Final_Cigar_table.txt", "w") as FinalCigar:
-        nbReads, M, I, D, S, H, N, P, X, Egal = [0 for n in range(10)]
-        for line in outputTable :
-            mutValues = line.split(";")
-            nbReads += 2
-            M += float(mutValues[2])+float(mutValues[12])
-            I += float(mutValues[3])+float(mutValues[13])
-            D += float(mutValues[4])+float(mutValues[14])
-            S += float(mutValues[5])+float(mutValues[15])
-            H += float(mutValues[6])+float(mutValues[16])
-            N += float(mutValues[7])+float(mutValues[17])
-            P += float(mutValues[8])+float(mutValues[18])
-            X += float(mutValues[9])+float(mutValues[19])
-            Egal += float(mutValues[10])+float(mutValues[20])
+    Compute a global CIGAR operation percentage summary from `records`.
 
-        FinalCigar.write("Global cigar mutation observed :"+"\n"
-                +"Alignment Match : "+str(round(M/nbReads,2))+"\n"
-                        +"Insertion : "+str(round(I/nbReads,2))+"\n"
-                        +"Deletion : "+str(round(D/nbReads,2))+"\n"
-                        +"Skipped region : "+str(round(S/nbReads,2))+"\n"
-                        +"Soft Clipping : "+str(round(H/nbReads,2))+"\n"
-                        +"Hard Clipping : "+str(round(N/nbReads,2))+"\n"
-                        +"Padding : "+str(round(P/nbReads,2))+"\n"
-                        +"Sequence Match : "+str(round(Egal/nbReads,2))+"\n"
-                        +"Sequence Mismatch : "+str(round(X/nbReads,2))+"\n")
+    - Skips unmapped records and entries with missing CIGAR ('*').
+    - Returns a formatted string listing percentage for each CIGAR op.
+    """
+    ops = ['M', 'I', 'D', 'S', 'H', 'N', 'P', 'X', '=']
+    totals = {op: 0.0 for op in ops}
+    total_counts = 0.0
+
+    for rec in records:
+        cigar = rec.get('CIGAR')
+        # skip unmapped or missing CIGAR
+        if not cigar or cigar == '*' or (rec.get('FLAG', 0) & 4):
+            continue
+        try:
+            d = readCigar(cigar)
+        except Exception:
+            continue
+        for op, val in d.items():
+            try:
+                cnt = float(val)
+            except Exception:
+                continue
+            totals[op] = totals.get(op, 0.0) + cnt
+            total_counts += cnt
+
+    if total_counts == 0.0:
+        return "No CIGAR information available for the selected records."
+
+    lines = ["Global CIGAR operation percentages (across considered records):"]
+    for op in ops:
+        pct = (totals.get(op, 0.0) / total_counts) * 100.0
+        lines.append(f"  {op}: {round(pct, 2)}%")
+
+    return "\n".join(lines)
+
 
 def analyse_fully_mapped(records):
     """
@@ -271,7 +256,12 @@ def analyse_fully_mapped(records):
         cigar = rec["CIGAR"]
 
         # 1. If FLAG 0x4 is set -> read is unmapped -> skip
-        if flag & 4:
+    
+        
+        #The flag &4 is a bitwise AND operation used to check if the 0x4 bit of the SAM FLAG is enabled. 
+        #This bit indicates that the read is not mapped to the reference. 
+        #If the operation returns a non-zero value, the read is considered unmapped and will be excluded from parsing. 
+        if flag & 4: 
             continue
 
         # 2. Check that CIGAR contains only 'M' operations
@@ -283,6 +273,10 @@ def analyse_fully_mapped(records):
     return fully_mapped
 
 def group_by_qname(records):
+    """Group a list of records by their `QNAME`.
+
+    Returns a dict mapping QNAME -> list_of_records.
+    """
     groups = {}
     for rec in records:
         q = rec["QNAME"]
@@ -291,11 +285,21 @@ def group_by_qname(records):
         groups[q].append(rec)
     return groups
 def is_fully_mapped(rec):
+    """Return True if record is mapped and its CIGAR contains only a single M operation.
+
+    A fully-mapped read is defined here as having FLAG bit 0x4 unset and a CIGAR
+    matching e.g. '100M'.
+    """
     import re
     return (rec["FLAG"] & 4 == 0) and re.fullmatch(r"\d+M", rec["CIGAR"])
 
 
 def is_partially_mapped(rec):
+    """Return True for reads that are mapped but not fully mapped.
+
+    Excludes unmapped reads (FLAG 0x4). For mapped reads, returns True when
+    the CIGAR string is not a single contiguous match (not like '100M').
+    """
     # Mapped but not fully mapped
     if rec["FLAG"] & 4:
         return False
@@ -337,7 +341,7 @@ def analyse_paired_end(records):
         r1_partial = is_partially_mapped(r1)
         r2_partial = is_partially_mapped(r2)
 
-        r1_unmapped = flag1 & 4 != 0
+        r1_unmapped = flag1 & 4 != 0 #not logical
         r2_unmapped = flag2 & 4 != 0
 
         # Case 1: One fully mapped + one unmapped
@@ -384,7 +388,7 @@ def analyse_reads_per_chromosome(records):
 def analyse_mapq_distribution(records):
     """
     Analyse MAPQ values across all records.
-    Group into ranges required by the project:
+    Group into ranges required:
     - MAPQ < 30
     - 30 ≤ MAPQ < 255
     - MAPQ == 255
@@ -409,6 +413,52 @@ def analyse_mapq_distribution(records):
         "MAPQ_30_254": mid,
         "MAPQ_255": high
     }
+
+
+def mapq_ok(rec, min_mapq=None, max_mapq=None):
+    """
+    Check whether a record's MAPQ value passes the numeric filters.
+
+    - If MAPQ is numeric, it must satisfy min_mapq <= MAPQ <= max_mapq when those
+      bounds are provided.
+    - If MAPQ is non-numeric and any numeric filter is set, treat the record as
+      failing the numeric filter (returns False). If no numeric filters set,
+      non-numeric MAPQ is treated as acceptable.
+
+    Returns True/False.
+    """
+    try:
+        mq = int(rec.get('MAPQ', 0))
+    except Exception:
+        return (min_mapq is None) and (max_mapq is None)
+    if min_mapq is not None and mq < min_mapq:
+        return False
+    if max_mapq is not None and mq > max_mapq:
+        return False
+    return True
+
+
+def status_ok(rec, filter_mode='all'):
+    """
+    Check whether a record matches the requested mapping-status filter.
+
+    filter_mode values:
+    - 'all'     : accept any record
+    - 'fully'   : only fully mapped reads (CIGAR =~ "^[0-9]+M$" and not unmapped)
+    - 'unmapped': only unmapped reads (FLAG bit 0x4 set)
+    - 'partial' : mapped but not fully mapped
+
+    Returns True/False.
+    """
+    if filter_mode == 'all':
+        return True
+    if filter_mode == 'fully':
+        return is_fully_mapped(rec)
+    if filter_mode == 'unmapped':
+        return (rec.get('FLAG', 0) & 4) != 0
+    if filter_mode == 'partial':
+        return is_partially_mapped(rec)
+    return True
 
 #### Summarise the results ####
 
@@ -530,30 +580,12 @@ def main(argv=None):
     # Apply MAPQ and mapping-status filters to records before summarising
     records = data['records']
 
-    def mapq_ok(rec):
-        try:
-            mq = int(rec.get('MAPQ', 0))
-        except Exception:
-            # If MAPQ isn't numeric, exclude when numeric filters are set
-            return (min_mapq is None) and (max_mapq is None)
-        if min_mapq is not None and mq < min_mapq:
-            return False
-        if max_mapq is not None and mq > max_mapq:
-            return False
-        return True
-
-    def status_ok(rec):
-        if filter_mode == 'all':
-            return True
-        if filter_mode == 'fully':
-            return is_fully_mapped(rec)
-        if filter_mode == 'unmapped':
-            return (rec.get('FLAG', 0) & 4) != 0
-        if filter_mode == 'partial':
-            return is_partially_mapped(rec)
-        return True
-
-    filtered = [r for r in records if mapq_ok(r) and status_ok(r)]
+    # Use module-level helpers `mapq_ok` and `status_ok` so the filtering
+    # logic is reusable and testable outside of `main`.
+    filtered = [
+        r for r in records
+        if mapq_ok(r, min_mapq, max_mapq) and status_ok(r, filter_mode)
+    ]
 
     # If the user wants only counts (and not a full summary), compute and print them
     if counts_only:
@@ -568,15 +600,30 @@ def main(argv=None):
                      f"Partially mapped reads: {partial_count}"]
 
         output_text = "\n".join(out_lines)
+
         if output_file:
+            # Write counts first, then append the CIGAR summary into the same file
             try:
                 with open(output_file, 'w') as outf:
                     outf.write(output_text)
+                try:
+                    cigar_text = globalPercentCigar(filtered)
+                    with open(output_file, 'a') as outf:
+                        outf.write("\n\n" + cigar_text)
+                except Exception as e:
+                    with open(output_file, 'a') as outf:
+                        outf.write("\n\n" + f"Could not include global CIGAR summary: {e}")
                 print(f"Counts written to {output_file}")
             except Exception as e:
                 print(f"Error writing counts to {output_file}: {e}")
                 print(output_text)
         else:
+            # No output file: generate legacy Final_Cigar_table.txt and include it
+            try:
+                cigar_text = globalPercentCigar(filtered)
+                output_text = output_text + "\n\n" + cigar_text
+            except Exception as e:
+                output_text = output_text + "\n\n" + f"Could not include global CIGAR summary: {e}"
             print(output_text)
         return
 
@@ -613,15 +660,29 @@ def main(argv=None):
     output_text = "\n".join(lines)
 
     if output_file:
+        # Write main summary first, then append cigar summary into same file
         try:
             with open(output_file, 'w') as outf:
                 outf.write(output_text)
+            try:
+                cigar_text = globalPercentCigar(filtered)
+                with open(output_file, 'a') as outf:
+                    outf.write("\n\n" + cigar_text)
+            except Exception as e:
+                with open(output_file, 'a') as outf:
+                    outf.write("\n\n" + f"Could not include global CIGAR summary: {e}")
             print(f"Summary written to {output_file}")
         except Exception as e:
             print(f"Error writing to output file {output_file}: {e}")
             print("Falling back to printing summary to stdout:\n")
             print(output_text)
     else:
+        # No output file: generate legacy Final_Cigar_table.txt and include it
+        try:
+            cigar_text = globalPercentCigar(filtered)
+            output_text = output_text + "\n\n" + cigar_text
+        except Exception as e:
+            output_text = output_text + "\n\n" + f"Could not include global CIGAR summary: {e}"
         print(output_text)
 
 
